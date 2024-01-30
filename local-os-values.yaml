@@ -1,0 +1,553 @@
+---
+clusterName: "opensearch-cluster"
+nodeGroup: "master"
+
+# If discovery.type in the opensearch configuration is set to "single-node",
+# this should be set to "true"
+# If "true", replicas will be forced to 1
+singleNode: true
+
+# The service that non master groups will try to connect to when joining the cluster
+# This should be set to clusterName + "-" + nodeGroup for your master group
+masterService: "opensearch-cluster-master"
+
+# OpenSearch roles that will be applied to this nodeGroup
+# These will be set as environment variable "node.roles". E.g. node.roles=master,ingest,data,remote_cluster_client
+roles:
+  - master
+  - ingest
+  - data
+  - remote_cluster_client
+
+replicas: 1
+
+opensearchJavaOpts: "-Xmx512M -Xms512M"
+
+resources:
+  requests:
+    cpu: "1000m"
+    memory: "100Mi"
+
+initResources: {}
+#  limits:
+#     cpu: "25m"
+#     memory: "128Mi"
+#  requests:
+#     cpu: "25m"
+#     memory: "128Mi"
+
+sidecarResources: {}
+#   limits:
+#     cpu: "25m"
+#     memory: "128Mi"
+#   requests:
+#     cpu: "25m"
+#     memory: "128Mi"
+
+persistence:
+  enabled: false
+  # Set to false to disable the `fsgroup-volume` initContainer that will update permissions on the persistent disk.
+  enableInitChown: false
+
+# Enabling this will publically expose your OpenSearch instance.
+# Only enable this if you have security enabled on your cluster
+ingress:
+  enabled: true
+  # For Kubernetes >= 1.18 you should specify the ingress-controller via the field ingressClassName
+  # See https://kubernetes.io/blog/2020/04/02/improvements-to-the-ingress-api-in-kubernetes-1.18/#specifying-the-class-of-an-ingress
+  ingressClassName: nginx
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  path: /
+  hosts:
+    - os.example.local
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+
+## Enable to add 3rd Party / Custom plugins not offered in the default OpenSearch image.
+plugins:
+  enabled: false
+  installList: []
+  # - example-fake-plugin
+
+# -- Array of extra K8s manifests to deploy
+extraObjects: 
+  # - apiVersion: v1
+  #   kind: ConfigMap
+  #   metadata:
+  #     labels:
+  #       app: data-prepper
+  #     name: data-prepper-config
+  #   data:
+  #     pipelines.yaml: |
+  #       logs-pipeline:
+  #         source:
+  #           otel_logs_source:
+  #             ssl: false
+  #         sink:
+  #           - opensearch:
+  #               hosts: ["https://opensearch-cluster-master:9200"]
+  #               insecure: true
+  #               username: admin
+  #               password: admin
+  #               index: otel-logs
+  #       trace-entry-pipeline:
+  #         delay: "100"
+  #         source:
+  #           otel_trace_source:
+  #             ssl: false
+  #         sink:
+  #           - pipeline:
+  #               name: "trace-raw-pipeline"
+  #           - pipeline:
+  #               name: "service-map-pipeline"
+  #       trace-raw-pipeline:
+  #         source:
+  #           pipeline:
+  #             name: "trace-entry-pipeline"
+  #         processor:
+  #           - otel_trace_raw:
+  #         sink:
+  #           - opensearch:
+  #               hosts: ["https://opensearch-cluster-master:9200"]
+  #               insecure: true
+  #               username: admin
+  #               password: admin
+  #               index_type: trace-analytics-raw
+  #               # index: otel-traces
+  #       service-map-pipeline:
+  #         delay: "100"
+  #         source:
+  #           pipeline:
+  #             name: "trace-entry-pipeline"
+  #         processor:
+  #           - service_map_stateful:
+  #         sink:
+  #           - opensearch:
+  #               hosts: ["https://opensearch-cluster-master:9200"]
+  #               insecure: true
+  #               username: admin
+  #               password: admin
+  #               index_type: trace-analytics-service-map
+  #               # index: otel-service-map
+  #     data-prepper-config.yaml: |
+  #       ssl: false
+  # - apiVersion: v1
+  #   kind: Service
+  #   metadata:
+  #     labels:
+  #       app: data-prepper
+  #     name: data-prepper-headless
+  #   spec:
+  #     clusterIP: None
+  #     ports:
+  #       - name: "traces"
+  #         port: 21890
+  #         targetPort: 21890
+  #       - name: "metrics"
+  #         port: 21891
+  #         targetPort: 21891
+  #       - name: "logs"
+  #         port: 21892
+  #         targetPort: 21892
+  #     selector:
+  #       app: data-prepper
+  # # - apiVersion: v1
+  # #   kind: Service
+  # #   metadata:
+  # #     labels:
+  # #       app: data-prepper
+  # #     name: data-prepper-metrics
+  # #   spec:
+  # #     type: NodePort
+  # #     ports:
+  # #       - name: "4900"
+  # #         port: 4900
+  # #         targetPort: 4900
+  # #     selector:
+  # #       app: data-prepper
+  # - apiVersion: apps/v1
+  #   kind: Deployment
+  #   metadata:
+  #     labels:
+  #       app: data-prepper
+  #     name: data-prepper
+  #   spec:
+  #     replicas: 1
+  #     selector:
+  #       matchLabels:
+  #         app: data-prepper
+  #     strategy:
+  #       type: Recreate
+  #     template:
+  #       metadata:
+  #         labels:
+  #           app: data-prepper
+  #       spec:
+  #         containers:
+  #           - image: opensearchproject/data-prepper:latest
+  #             name: data-prepper
+  #             ports:
+  #               - containerPort: 21890
+  #               - containerPort: 21891
+  #               - containerPort: 21892
+  #             resources: {}
+  #             volumeMounts:
+  #               - name: prepper-configmap-config
+  #                 mountPath: /usr/share/data-prepper/config/data-prepper-config.yaml
+  #                 subPath: data-prepper-config.yaml
+  #               - name: prepper-configmap-pipelines
+  #                 mountPath: /usr/share/data-prepper/pipelines/pipelines.yaml
+  #                 subPath: pipelines.yaml
+  #         restartPolicy: Always
+  #         serviceAccountName: ""
+  #         volumes:
+  #           - name: prepper-configmap-config
+  #             configMap:
+  #               name: data-prepper-config
+  #               items:
+  #                 - key: data-prepper-config.yaml
+  #                   path: data-prepper-config.yaml
+  #           - name: prepper-configmap-pipelines
+  #             configMap:
+  #               name: data-prepper-config
+  #               items:
+  #                 - key: pipelines.yaml
+  #                   path: pipelines.yaml
+
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      labels:
+        app: traces-prepper
+      name: traces-prepper-config
+    data:
+      pipelines.yaml: |
+        trace-entry-pipeline:
+          delay: "100"
+          source:
+            otel_trace_source:
+              ssl: false
+          sink:
+            # - stdout: {}
+            - pipeline:
+                name: "trace-raw-pipeline"
+            - pipeline:
+                name: "service-map-pipeline"
+        trace-raw-pipeline:
+          source:
+            pipeline:
+              name: "trace-entry-pipeline"
+          processor:
+            - otel_trace_raw:
+          sink:
+            - opensearch:
+                hosts: ["https://opensearch-cluster-master:9200"]
+                insecure: true
+                username: admin
+                password: admin
+                index_type: trace-analytics-raw
+                # index: otel-traces
+        service-map-pipeline:
+          delay: "100"
+          source:
+            pipeline:
+              name: "trace-entry-pipeline"
+          processor:
+            - service_map_stateful:
+          sink:
+            - opensearch:
+                hosts: ["https://opensearch-cluster-master:9200"]
+                insecure: true
+                username: admin
+                password: admin
+                index_type: trace-analytics-service-map
+                # index: otel-service-map
+      data-prepper-config.yaml: |
+        ssl: false
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      labels:
+        app: traces-prepper
+      name: traces-prepper-headless
+    spec:
+      clusterIP: None
+      ports:
+        - name: "traces"
+          port: 21890
+          targetPort: 21890
+      selector:
+        app: traces-prepper
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      labels:
+        app: traces-prepper
+      name: traces-prepper
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: traces-prepper
+      strategy:
+        type: Recreate
+      template:
+        metadata:
+          labels:
+            app: traces-prepper
+        spec:
+          containers:
+            - image: opensearchproject/data-prepper:latest
+              name: traces-prepper
+              ports:
+                - containerPort: 21890
+              resources: {}
+              volumeMounts:
+                - name: prepper-configmap-config
+                  mountPath: /usr/share/data-prepper/config/data-prepper-config.yaml
+                  subPath: data-prepper-config.yaml
+                - name: prepper-configmap-pipelines
+                  mountPath: /usr/share/data-prepper/pipelines/pipelines.yaml
+                  subPath: pipelines.yaml
+          restartPolicy: Always
+          serviceAccountName: ""
+          volumes:
+            - name: prepper-configmap-config
+              configMap:
+                name: traces-prepper-config
+                items:
+                  - key: data-prepper-config.yaml
+                    path: data-prepper-config.yaml
+            - name: prepper-configmap-pipelines
+              configMap:
+                name: traces-prepper-config
+                items:
+                  - key: pipelines.yaml
+                    path: pipelines.yaml
+
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      labels:
+        app: metrics-prepper
+      name: metrics-prepper-config
+    data:
+      pipelines.yaml: |
+        metric-entry-pipeline:
+          delay: "100"
+          source:
+            otel_metrics_source:
+              ssl: false
+          processor:
+            - otel_metrics_raw_processor:
+                calculate_histogram_buckets: true
+                calculate_exponential_histogram_buckets: true
+                exponential_histogram_max_allowed_scale: 10
+                flatten_attributes: false
+          sink:
+            - stdout: {}
+            - opensearch:
+                hosts: ["https://opensearch-cluster-master:9200"]
+                insecure: true
+                username: admin
+                password: admin
+                index_type: custom
+                index: otel-metrics
+                # index: ss4o_metrics-otel-v0001
+                # indexAlias: ss4o_metrics-otel
+      data-prepper-config.yaml: |
+        ssl: false
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      labels:
+        app: metrics-prepper
+      name: metrics-prepper-headless
+    spec:
+      clusterIP: None
+      ports:
+        - name: "metrics"
+          port: 21891
+          targetPort: 21891
+      selector:
+        app: metrics-prepper
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      labels:
+        app: metrics-prepper
+      name: metrics-prepper
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: metrics-prepper
+      strategy:
+        type: Recreate
+      template:
+        metadata:
+          labels:
+            app: metrics-prepper
+          annotations:
+            config-version: 1.0.1
+        spec:
+          containers:
+            - image: opensearchproject/data-prepper:latest
+              name: metrics-prepper
+              ports:
+                - containerPort: 21891
+              resources: {}
+              volumeMounts:
+                - name: prepper-configmap-config
+                  mountPath: /usr/share/data-prepper/config/data-prepper-config.yaml
+                  subPath: data-prepper-config.yaml
+                - name: prepper-configmap-pipelines
+                  mountPath: /usr/share/data-prepper/pipelines/pipelines.yaml
+                  subPath: pipelines.yaml
+          restartPolicy: Always
+          serviceAccountName: ""
+          volumes:
+            - name: prepper-configmap-config
+              configMap:
+                name: metrics-prepper-config
+                items:
+                  - key: data-prepper-config.yaml
+                    path: data-prepper-config.yaml
+            - name: prepper-configmap-pipelines
+              configMap:
+                name: metrics-prepper-config
+                items:
+                  - key: pipelines.yaml
+                    path: pipelines.yaml
+
+
+  - apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      labels:
+        app: logs-prepper
+      name: logs-prepper-config
+    data:
+      pipelines.yaml: |
+        logs-pipeline:
+          source:
+            otel_logs_source:
+              ssl: false
+          processor:
+            - grok:
+                match:
+                  log: [ "%{COMMONAPACHELOG}" ]
+          sink:
+            # - stdout: {}
+            - opensearch:
+                hosts: ["https://opensearch-cluster-master:9200"]
+                insecure: true
+                username: admin
+                password: admin
+                index: otel-logs-index
+      data-prepper-config.yaml: |
+        ssl: false
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      labels:
+        app: logs-prepper
+      name: logs-prepper-headless
+    spec:
+      clusterIP: None
+      ports:
+        - name: "logs"
+          port: 21892
+          targetPort: 21892
+      selector:
+        app: logs-prepper
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      labels:
+        app: logs-prepper
+      name: logs-prepper
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: logs-prepper
+      strategy:
+        type: Recreate
+      template:
+        metadata:
+          labels:
+            app: logs-prepper
+          annotations:
+            config-version: 1.0.2
+        spec:
+          containers:
+            - image: opensearchproject/data-prepper:latest
+              name: logs-prepper
+              ports:
+                - containerPort: 21892
+              resources: {}
+              volumeMounts:
+                - name: prepper-configmap-config
+                  mountPath: /usr/share/data-prepper/config/data-prepper-config.yaml
+                  subPath: data-prepper-config.yaml
+                - name: prepper-configmap-pipelines
+                  mountPath: /usr/share/data-prepper/pipelines/pipelines.yaml
+                  subPath: pipelines.yaml
+          restartPolicy: Always
+          serviceAccountName: ""
+          volumes:
+            - name: prepper-configmap-config
+              configMap:
+                name: logs-prepper-config
+                items:
+                  - key: data-prepper-config.yaml
+                    path: data-prepper-config.yaml
+            - name: prepper-configmap-pipelines
+              configMap:
+                name: logs-prepper-config
+                items:
+                  - key: pipelines.yaml
+                    path: pipelines.yaml
+
+  # - apiVersion: secrets-store.csi.x-k8s.io/v1
+  #   kind: SecretProviderClass
+  #   metadata:
+  #     name: argocd-secrets-store
+  #   spec:
+  #     provider: aws
+  #     parameters:
+  #       objects: |
+  #         - objectName: "argocd"
+  #           objectType: "secretsmanager"
+  #           jmesPath:
+  #               - path: "client_id"
+  #                 objectAlias: "client_id"
+  #               - path: "client_secret"
+  #                 objectAlias: "client_secret"
+  #     secretObjects:
+  #     - data:
+  #       - key: client_id
+  #         objectName: client_id
+  #       - key: client_secret
+  #         objectName: client_secret
+  #       secretName: argocd-secrets-store
+  #       type: Opaque
+  #       labels:
+  #         app.kubernetes.io/part-of: argocd
+  # - |
+  #    apiVersion: policy/v1
+  #    kind: PodDisruptionBudget
+  #    metadata:
+  #      name: {{ template "opensearch.uname" . }}
+  #      labels:
+  #        {{- include "opensearch.labels" . | nindent 4 }}
+  #    spec:
+  #      minAvailable: 1
+  #      selector:
+  #        matchLabels:
+  #          {{- include "opensearch.selectorLabels" . | nindent 6 }}

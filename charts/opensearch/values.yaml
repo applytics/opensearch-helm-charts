@@ -58,6 +58,10 @@ config:
     # Start OpenSearch Security Demo Configuration
     # WARNING: revise all the lines below before you go into production
     plugins:
+      query:
+        datasources:
+          encryption:
+            masterkey: 123456789012345678901234
       security:
         ssl:
           transport:
